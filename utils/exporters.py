@@ -5,7 +5,11 @@ from __future__ import annotations
 import io
 from typing import Any
 
-from utils.resume_parser import DEFAULT_LABELS, DEFAULT_SECTION_ORDER
+from utils.resume_parser import (
+    DEFAULT_LABELS,
+    DEFAULT_SECTION_ORDER,
+    PROFESSIONAL_SECTION_ORDER,
+)
 
 
 def export_docx(resume: dict[str, Any]) -> bytes:
@@ -33,6 +37,8 @@ def export_docx(resume: dict[str, Any]) -> bytes:
     personal = resume["personal"]
     name_align = _docx_align(profile.get("name_alignment", "center"))
     contact_align = _docx_align(profile.get("contact_alignment", profile.get("name_alignment", "center")))
+    name_rgb = _hex_to_rgb(profile.get("name_color") or "#0A2F45")
+    title_rgb = _hex_to_rgb(profile.get("title_color") or profile.get("accent_color") or "#0E7C86")
 
     name = document.add_paragraph()
     name.alignment = name_align
@@ -40,7 +46,7 @@ def export_docx(resume: dict[str, Any]) -> bytes:
     run.bold = bool(profile.get("name_bold", True))
     run.font.size = Pt(float(profile.get("name_font_size") or 18))
     run.font.name = profile.get("name_font") or body_font
-    run.font.color.rgb = RGBColor(0x0A, 0x2F, 0x45)
+    run.font.color.rgb = name_rgb
 
     if personal.get("target_title"):
         title = document.add_paragraph()
@@ -48,7 +54,7 @@ def export_docx(resume: dict[str, Any]) -> bytes:
         title_run = title.add_run(personal.get("target_title") or "")
         title_run.font.size = Pt(12)
         title_run.font.name = body_font
-        title_run.font.color.rgb = RGBColor(0x0E, 0x7C, 0x86)
+        title_run.font.color.rgb = title_rgb
 
     contact = document.add_paragraph()
     contact.alignment = contact_align
@@ -65,12 +71,17 @@ def export_docx(resume: dict[str, Any]) -> bytes:
 
 
 def export_pdf(resume: dict[str, Any]) -> bytes:
-    from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
-    from reportlab.lib.pagesizes import LETTER
-    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-    from reportlab.lib.units import inch
-    from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
+        from reportlab.lib.pagesizes import LETTER
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.lib.units import inch
+        from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(
+            "reportlab is required for PDF export. Install with: pip install reportlab"
+        ) from exc
 
     profile = _active_profile(resume)
     margins = profile.get("margins_inches", {})
@@ -96,39 +107,52 @@ def export_pdf(resume: dict[str, Any]) -> bytes:
         TA_CENTER,
     )
 
+    accent = profile.get("accent_color") or "#0E7C86"
+    name_color = profile.get("name_color") or "#0A2F45"
+    title_color = profile.get("title_color") or accent
+    text_color = profile.get("text_color") or "#102A3A"
+    muted_color = profile.get("muted_color") or "#5A7585"
+    heading_color = profile.get("heading_color") or name_color
+    rule_color = profile.get("rule_color") or accent
+    # ReportLab built-ins: Helvetica for modern, Times for classic.
+    body_font = "Times-Roman" if "times" in str(profile.get("body_font") or "").lower() else "Helvetica"
+    body_bold = "Times-Bold" if body_font.startswith("Times") else "Helvetica-Bold"
+    body_oblique = "Times-Italic" if body_font.startswith("Times") else "Helvetica-Oblique"
+
     styles = getSampleStyleSheet()
     name_style = ParagraphStyle(
         "NameStyle",
         parent=styles["Heading1"],
-        fontName="Helvetica-Bold",
+        fontName=body_bold,
         fontSize=float(profile.get("name_font_size") or 18),
-        textColor=colors.HexColor("#0A2F45"),
+        textColor=colors.HexColor(name_color),
         alignment=name_align,
         spaceAfter=2,
     )
     title_style = ParagraphStyle(
         "TitleStyle",
         parent=styles["Normal"],
-        fontName="Helvetica",
+        fontName=body_font,
         fontSize=11,
-        textColor=colors.HexColor("#0E7C86"),
+        textColor=colors.HexColor(title_color),
         alignment=name_align,
         spaceAfter=4,
     )
     contact_style = ParagraphStyle(
         "ContactStyle",
         parent=styles["Normal"],
+        fontName=body_font,
         fontSize=8.5,
         alignment=contact_align,
-        textColor=colors.HexColor("#102A3A"),
+        textColor=colors.HexColor(muted_color),
         spaceAfter=8,
     )
     section_style = ParagraphStyle(
         "SectionStyle",
         parent=styles["Heading2"],
-        fontName="Helvetica-Bold",
+        fontName=body_bold,
         fontSize=float(profile.get("heading_font_size") or 11),
-        textColor=colors.HexColor("#0A2F45"),
+        textColor=colors.HexColor(heading_color),
         spaceBefore=10,
         spaceAfter=4,
         alignment=TA_LEFT,
@@ -136,44 +160,135 @@ def export_pdf(resume: dict[str, Any]) -> bytes:
     body_style = ParagraphStyle(
         "BodyStyle",
         parent=styles["Normal"],
+        fontName=body_font,
         fontSize=float(profile.get("body_font_size") or 10),
         leading=13,
-        textColor=colors.HexColor("#102A3A"),
+        textColor=colors.HexColor(text_color),
     )
     job_style = ParagraphStyle(
         "JobStyle",
         parent=styles["Normal"],
-        fontName="Helvetica-Bold",
+        fontName=body_bold,
         fontSize=11,
-        textColor=colors.HexColor("#102A3A"),
+        textColor=colors.HexColor(text_color),
         spaceBefore=6,
     )
     meta_style = ParagraphStyle(
         "MetaStyle",
         parent=styles["Normal"],
-        fontName="Helvetica-Oblique",
+        fontName=body_oblique,
         fontSize=9,
-        textColor=colors.HexColor("#5A7585"),
+        textColor=colors.HexColor(muted_color),
         spaceAfter=2,
     )
     project_style = ParagraphStyle(
         "ProjectStyle",
         parent=styles["Normal"],
-        fontName="Helvetica-Bold",
+        fontName=body_bold,
         fontSize=10,
-        textColor=colors.HexColor("#0E7C86"),
+        textColor=colors.HexColor(accent),
         spaceBefore=4,
     )
 
     personal = resume["personal"]
-    story: list[Any] = [
-        Paragraph(_escape(personal.get("full_name") or "Your Name"), name_style),
-    ]
-    if personal.get("target_title"):
-        story.append(Paragraph(_escape(personal.get("target_title") or ""), title_style))
-    story.append(Paragraph(_escape(_contact_line(personal, profile)), contact_style))
-    if profile.get("heading_underline", True):
-        story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#0E7C86")))
+    header_style = profile.get("pdf_header_style") or "standard"
+    story: list[Any] = []
+
+    if header_style == "banner":
+        banner_style = ParagraphStyle(
+            "BannerName",
+            parent=name_style,
+            textColor=colors.white,
+            backColor=colors.HexColor(accent),
+            borderPadding=8,
+            spaceAfter=2,
+        )
+        banner_title = ParagraphStyle(
+            "BannerTitle",
+            parent=title_style,
+            textColor=colors.HexColor("#E8F2F8"),
+            backColor=colors.HexColor(accent),
+            borderPadding=4,
+        )
+        banner_contact = ParagraphStyle(
+            "BannerContact",
+            parent=contact_style,
+            textColor=colors.HexColor("#D7E6EF"),
+            backColor=colors.HexColor(accent),
+            borderPadding=4,
+            spaceAfter=10,
+        )
+        story.append(Paragraph(_escape(personal.get("full_name") or "Your Name"), banner_style))
+        if personal.get("target_title"):
+            story.append(Paragraph(_escape(personal.get("target_title") or ""), banner_title))
+        story.append(Paragraph(_escape(_contact_line(personal, profile)), banner_contact))
+    elif header_style == "stacked":
+        story.append(Paragraph(_escape(personal.get("full_name") or "Your Name"), name_style))
+        if personal.get("target_title"):
+            story.append(Paragraph(_escape(personal.get("target_title") or ""), title_style))
+        for value in [
+            personal.get("phone"),
+            personal.get("email"),
+            personal.get("location"),
+            personal.get("linkedin"),
+        ]:
+            if value:
+                story.append(Paragraph(_escape(str(value)), contact_style))
+        story.append(Spacer(1, 6))
+    elif header_style == "accent_bar":
+        story.append(Paragraph(_escape(personal.get("full_name") or "Your Name"), name_style))
+        if personal.get("target_title"):
+            story.append(Paragraph(_escape(personal.get("target_title") or ""), title_style))
+        story.append(
+            HRFlowable(
+                width="25%",
+                thickness=3,
+                color=colors.HexColor(accent),
+                spaceBefore=2,
+                spaceAfter=6,
+                hAlign="CENTER" if profile.get("name_alignment") == "center" else "LEFT",
+            )
+        )
+        story.append(Paragraph(_escape(_contact_line(personal, profile)), contact_style))
+    else:
+        story.append(Paragraph(_escape(personal.get("full_name") or "Your Name"), name_style))
+        if personal.get("target_title"):
+            story.append(Paragraph(_escape(personal.get("target_title") or ""), title_style))
+        story.append(Paragraph(_escape(_contact_line(personal, profile)), contact_style))
+        if profile.get("header_rule", True):
+            thickness = 2.2 if (profile.get("pdf_heading_style") == "double") else float(
+                profile.get("rule_thickness") or 1
+            )
+            story.append(
+                HRFlowable(
+                    width="100%",
+                    thickness=thickness,
+                    color=colors.HexColor(rule_color),
+                    spaceBefore=2,
+                    spaceAfter=8,
+                )
+            )
+
+    # Adapt section heading style for this template.
+    heading_mode = profile.get("pdf_heading_style") or "underline"
+    if heading_mode == "band":
+        section_style = ParagraphStyle(
+            "SectionBand",
+            parent=section_style,
+            textColor=colors.white,
+            backColor=colors.HexColor(accent),
+            borderPadding=4,
+            spaceBefore=10,
+            spaceAfter=5,
+        )
+    elif heading_mode == "plain":
+        section_style = ParagraphStyle(
+            "SectionPlain",
+            parent=section_style,
+            textColor=colors.HexColor("#111111"),
+            spaceBefore=10,
+            spaceAfter=3,
+        )
 
     for section_key in profile.get("section_order") or DEFAULT_SECTION_ORDER:
         story.extend(
@@ -195,27 +310,11 @@ def export_pdf(resume: dict[str, Any]) -> bytes:
 
 
 def _active_profile(resume: dict[str, Any]) -> dict[str, Any]:
-    if resume.get("use_reference_format") and resume.get("format_profile"):
+    if resume.get("format_profile"):
         return resume["format_profile"]
-    return {
-        "section_order": list(DEFAULT_SECTION_ORDER),
-        "section_labels": dict(DEFAULT_LABELS),
-        "name_alignment": "center",
-        "contact_alignment": "center",
-        "contact_separator": " | ",
-        "body_font": "Calibri",
-        "name_font": "Calibri",
-        "name_font_size": 18,
-        "name_bold": True,
-        "heading_font_size": 11,
-        "heading_all_caps": True,
-        "heading_bold": True,
-        "heading_underline": True,
-        "body_font_size": 11,
-        "job_line_style": "title_emdash_company",
-        "margins_inches": {"top": 0.6, "bottom": 0.6, "left": 0.7, "right": 0.7},
-        "include_projects_under_experience": True,
-    }
+    from utils.templates import apply_template_to_profile
+
+    return apply_template_to_profile(resume.get("resume_template") or "Modern Professional")
 
 
 def _section_label(profile: dict[str, Any], key: str) -> str:
@@ -245,6 +344,8 @@ def _contact_line(personal: dict[str, Any], profile: dict[str, Any]) -> str:
 def _job_heading(job: dict[str, Any], profile: dict[str, Any]) -> str:
     title = job.get("job_title", "") or ""
     company = job.get("company_name", "") or ""
+    if profile.get("company_first"):
+        return f"{company} — {title}".strip(" —") if company or title else ""
     style = profile.get("job_line_style") or "title_emdash_company"
     if style == "title_at_company":
         return f"{title} at {company}".strip()
@@ -297,20 +398,16 @@ def _write_docx_section(
             meta_run.italic = True
             meta_run.font.size = Pt_safe(10)
 
-            if job.get("technologies"):
-                tech = document.add_paragraph()
-                tech_label = tech.add_run("Technologies: ")
-                tech_label.bold = True
-                tech.add_run(", ".join(job["technologies"]))
-
             for bullet in job.get("bullets", []):
                 document.add_paragraph(bullet, style="List Bullet")
 
             if include_projects:
-                _write_docx_projects(document, job.get("projects", []))
+                _write_docx_projects(document, job.get("projects", []), profile)
         return
 
     if section_key == "projects":
+        if include_projects_section_blocked(profile):
+            return
         projects = [
             project
             for job in resume.get("experience", [])
@@ -319,7 +416,7 @@ def _write_docx_section(
         if not projects:
             return
         _add_heading(document, label, profile)
-        _write_docx_projects(document, projects)
+        _write_docx_projects(document, projects, profile)
         return
 
     if section_key == "education":
@@ -357,16 +454,65 @@ def _write_docx_section(
             document.add_paragraph(item, style="List Bullet")
 
 
-def _write_docx_projects(document: Any, projects: list[dict[str, Any]]) -> None:
+def include_projects_section_blocked(profile: dict[str, Any]) -> bool:
+    """Standalone PROJECTS section is blocked when projects already sit under experience."""
+    if profile.get("include_projects_under_experience", True):
+        return True
+    return not profile.get("show_standalone_projects", False)
+
+
+def _hex_to_rgb(value: str) -> Any:
+    from docx.shared import RGBColor
+
+    hex_value = (value or "#0A2F45").lstrip("#")
+    if len(hex_value) != 6:
+        hex_value = "0A2F45"
+    return RGBColor(int(hex_value[0:2], 16), int(hex_value[2:4], 16), int(hex_value[4:6], 16))
+
+
+def _write_docx_projects(
+    document: Any, projects: list[dict[str, Any]], profile: dict[str, Any] | None = None
+) -> None:
+    accent = _hex_to_rgb((profile or {}).get("accent_color") or "#0E7C86")
     for project in projects:
         project_heading = document.add_paragraph()
         tenure = f" ({project['tenure']})" if project.get("tenure") else ""
         project_run = project_heading.add_run(f"{project.get('name', 'Project')}{tenure}")
         project_run.bold = True
+        project_run.font.color.rgb = accent
+
+        meta_bits = [
+            part
+            for part in [
+                f"Client: {project['client_name']}" if project.get("client_name") else "",
+                f"Domain: {project['domain']}" if project.get("domain") else "",
+                f"Role: {project['role']}" if project.get("role") else "",
+            ]
+            if part
+        ]
+        if meta_bits:
+            meta = document.add_paragraph()
+            meta_run = meta.add_run(" · ".join(meta_bits))
+            meta_run.italic = True
+            meta_run.font.size = Pt_safe(9)
+
         if project.get("description"):
             document.add_paragraph(project["description"])
+        if project.get("technologies"):
+            tech = project["technologies"]
+            if isinstance(tech, list):
+                tech = ", ".join(tech)
+            tech_line = document.add_paragraph()
+            tech_label = tech_line.add_run("Technologies: ")
+            tech_label.bold = True
+            tech_line.add_run(str(tech))
         for bullet in project.get("bullets", []):
             document.add_paragraph(bullet, style="List Bullet")
+        achievements = project.get("achievements") or []
+        if isinstance(achievements, str):
+            achievements = [line.strip(" •-\t") for line in achievements.splitlines() if line.strip()]
+        for item in achievements:
+            document.add_paragraph(item, style="List Bullet")
 
 
 def _pdf_section_flowables(
@@ -417,13 +563,6 @@ def _pdf_section_flowables(
             )
             if meta:
                 flows.append(Paragraph(_escape(meta), meta_style))
-            if job.get("technologies"):
-                flows.append(
-                    Paragraph(
-                        f"<b>Technologies:</b> {_escape(', '.join(job['technologies']))}",
-                        body_style,
-                    )
-                )
             flows.extend(_bullet_list(job.get("bullets", []), body_style))
             if include_projects:
                 flows.extend(
@@ -431,11 +570,14 @@ def _pdf_section_flowables(
                         job.get("projects", []),
                         body_style=body_style,
                         project_style=project_style,
+                        meta_style=meta_style,
                     )
                 )
         return flows
 
     if section_key == "projects":
+        if include_projects_section_blocked(profile):
+            return flows
         projects = [
             project
             for job in resume.get("experience", [])
@@ -445,7 +587,12 @@ def _pdf_section_flowables(
             return flows
         flows.append(Paragraph(_escape(label), section_style))
         flows.extend(
-            _pdf_projects(projects, body_style=body_style, project_style=project_style)
+            _pdf_projects(
+                projects,
+                body_style=body_style,
+                project_style=project_style,
+                meta_style=meta_style,
+            )
         )
         return flows
 
@@ -483,7 +630,11 @@ def _pdf_section_flowables(
 
 
 def _pdf_projects(
-    projects: list[dict[str, Any]], *, body_style: Any, project_style: Any
+    projects: list[dict[str, Any]],
+    *,
+    body_style: Any,
+    project_style: Any,
+    meta_style: Any | None = None,
 ) -> list[Any]:
     from reportlab.platypus import Paragraph
 
@@ -493,9 +644,34 @@ def _pdf_projects(
         flows.append(
             Paragraph(_escape(f"{project.get('name', 'Project')}{tenure}"), project_style)
         )
+        meta_bits = [
+            part
+            for part in [
+                f"Client: {project['client_name']}" if project.get("client_name") else "",
+                f"Domain: {project['domain']}" if project.get("domain") else "",
+                f"Role: {project['role']}" if project.get("role") else "",
+            ]
+            if part
+        ]
+        if meta_bits and meta_style is not None:
+            flows.append(Paragraph(_escape(" · ".join(meta_bits)), meta_style))
         if project.get("description"):
             flows.append(Paragraph(_escape(project["description"]), body_style))
-        flows.extend(_bullet_list(project.get("bullets", []), body_style))
+        if project.get("technologies"):
+            tech = project["technologies"]
+            if isinstance(tech, list):
+                tech = ", ".join(tech)
+            flows.append(
+                Paragraph(f"<b>Technologies:</b> {_escape(str(tech))}", body_style)
+            )
+        bullets = list(project.get("bullets", []) or [])
+        achievements = project.get("achievements") or []
+        if isinstance(achievements, str):
+            achievements = [
+                line.strip(" •-\t") for line in achievements.splitlines() if line.strip()
+            ]
+        bullets.extend(achievements)
+        flows.extend(_bullet_list(bullets, body_style))
     return flows
 
 
@@ -510,17 +686,29 @@ def _add_heading(document: Any, text: str, profile: dict[str, Any] | None = None
     run.bold = bool(profile.get("heading_bold", True))
     run.font.size = Pt(float(profile.get("heading_font_size") or 11))
     run.font.name = profile.get("body_font") or "Calibri"
-    run.font.color.rgb = RGBColor(0x0A, 0x2F, 0x45)
+    run.font.color.rgb = _hex_to_rgb(profile.get("heading_color") or profile.get("name_color") or "#0A2F45")
 
-    if profile.get("heading_underline", True):
+    heading_mode = profile.get("pdf_heading_style") or "underline"
+    accent_hex = (profile.get("accent_color") or "#0E7C86").lstrip("#")
+    if heading_mode == "band":
+        run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+        # Approximate band with shading on the paragraph.
+        from docx.oxml import parse_xml
+
+        shading = parse_xml(
+            f'<w:shd xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+            f'w:fill="{accent_hex}"/>'
+        )
+        paragraph._p.get_or_add_pPr().append(shading)
+    elif heading_mode != "plain" and profile.get("heading_underline", True):
         p = paragraph._p
         p_pr = p.get_or_add_pPr()
         p_bdr = OxmlElement("w:pBdr")
         bottom = OxmlElement("w:bottom")
-        bottom.set(qn("w:val"), "single")
-        bottom.set(qn("w:sz"), "6")
+        bottom.set(qn("w:val"), "double" if heading_mode == "double" else "single")
+        bottom.set(qn("w:sz"), "12" if heading_mode == "double" else "6")
         bottom.set(qn("w:space"), "1")
-        bottom.set(qn("w:color"), "0E7C86")
+        bottom.set(qn("w:color"), accent_hex)
         p_bdr.append(bottom)
         p_pr.append(p_bdr)
 

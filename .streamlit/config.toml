@@ -22,11 +22,11 @@ headingFont = "'Fraunces':https://fonts.googleapis.com/css2?family=Fraunces:opsz
 codeFont = "'IBM Plex Mono':https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"
 baseFontSize = 16
 baseFontWeight = 500
-headingFontSizes = ["2.35rem", "1.7rem", "1.35rem", "1.15rem", "1rem", "0.92rem"]
-headingFontWeights = [750, 700, 650, 650, 600, 600]
+headingFontSizes = ["2.85rem", "1.85rem", "1.4rem", "1.15rem", "1rem", "0.92rem"]
+headingFontWeights = [800, 700, 650, 650, 600, 600]
 linkUnderline = false
-paddingTop = "1rem"
-paddingBottom = "2.5rem"
+paddingTop = "1.5rem"
+paddingBottom = "2.75rem"
 chartCategoricalColors = ["#0E7C86", "#123B56", "#C7923E", "#2F6FED", "#4F7C8A", "#1B3A4B"]
 
 blueColor = "#2F6FED"

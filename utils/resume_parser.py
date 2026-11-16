@@ -35,6 +35,18 @@ DEFAULT_LABELS = {
     "achievements": "KEY ACHIEVEMENTS",
 }
 
+# Canonical ATS-friendly section order for generated resumes.
+# Projects are folded into Professional Experience as Key Responsibilities —
+# not rendered as a separate repeating PROJECTS block.
+PROFESSIONAL_SECTION_ORDER = [
+    "summary",
+    "skills",
+    "experience",
+    "education",
+    "certifications",
+    "achievements",
+]
+
 
 def parse_reference_resume(file_bytes: bytes, filename: str) -> dict[str, Any]:
     lower = filename.lower()
